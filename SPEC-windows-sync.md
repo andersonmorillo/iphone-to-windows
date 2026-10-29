@@ -53,7 +53,7 @@ One Python file. The name rules and the listing parser are pure functions. Devic
 ## Success Criteria
 
 1. The window's only choice is the folder. That choice is remembered.
-2. With the phone unplugged, the window says `Waiting for iPhone.`
+2. With the phone unplugged, the window leads with `iPhone not connected` and `Plug it in and unlock it.` The folder choice stays.
 3. Plugging in the phone copies regular files from Drop Box Documents that are not already in the folder.
 4. A second pass does not overwrite those files.
 5. `--check` passes.

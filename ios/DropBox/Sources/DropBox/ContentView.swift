@@ -10,10 +10,18 @@ struct ContentView: View {
     @State private var pending: [URL] = []
     @State private var isCopying = false
     @State private var status: String?
+    @State private var computerConnected = false
 
     var body: some View {
         VStack(spacing: 16) {
-            Text("Everything works.")
+            if computerConnected {
+                Text("Connected to the computer.")
+                Text("Everything works.")
+            } else {
+                Text("Not connected to the computer.")
+                    .font(.title2.bold())
+                Text("Plug it in and unlock it.")
+            }
             PhotosPicker("Photos", selection: $photos, maxSelectionCount: nil, matching: .images)
                 .disabled(isCopying)
             Button("Add Files to Drop Box") {
@@ -31,6 +39,12 @@ struct ContentView: View {
             }
         }
         .padding()
+        .task {
+            while !Task.isCancelled {
+                computerConnected = Self.computerIsConnected()
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
         .onChange(of: photos) { _, items in
             guard !items.isEmpty else { return }
             photos = []
@@ -115,6 +129,15 @@ struct ContentView: View {
         }
         pending.removeAll()
         status = DocumentCopy.status(added: added, failed: failed)
+    }
+
+    private static func computerIsConnected(now: Date = Date()) -> Bool {
+        guard let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
+            return false
+        }
+        let stamp = caches.appendingPathComponent(ComputerLink.fileName)
+        let modified = try? stamp.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        return ComputerLink.isConnected(modifiedAt: modified, now: now)
     }
 }
 

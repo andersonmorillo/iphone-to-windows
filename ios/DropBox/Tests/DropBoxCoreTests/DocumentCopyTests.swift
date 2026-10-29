@@ -81,6 +81,13 @@ final class DocumentCopyTests: XCTestCase {
         XCTAssertNil(DocumentCopy.status(added: 0, failed: 0))
     }
 
+    func testComputerLinkUsesTheStampAge() {
+        let now = Date(timeIntervalSince1970: 1_000)
+        XCTAssertFalse(ComputerLink.isConnected(modifiedAt: nil, now: now))
+        XCTAssertTrue(ComputerLink.isConnected(modifiedAt: now.addingTimeInterval(-7), now: now))
+        XCTAssertFalse(ComputerLink.isConnected(modifiedAt: now.addingTimeInterval(-8), now: now))
+    }
+
     private func write(_ text: String, named name: String) throws -> URL {
         let url = root.appendingPathComponent(name)
         try Data(text.utf8).write(to: url)

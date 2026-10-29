@@ -65,3 +65,14 @@ public enum DocumentCopy {
         }
     }
 }
+
+public enum ComputerLink {
+    public static let fileName = "pc-seen"
+    /// The desktop app refreshes this about every 2 seconds.
+    public static let maxAge: TimeInterval = 8
+
+    public static func isConnected(modifiedAt: Date?, now: Date) -> Bool {
+        guard let modifiedAt else { return false }
+        return now.timeIntervalSince(modifiedAt) < maxAge
+    }
+}

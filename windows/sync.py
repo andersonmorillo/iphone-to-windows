@@ -92,6 +92,15 @@ def parse_listing(text: str) -> list[str]:
     return names
 
 
+def window_state(message: str) -> tuple[bool, str]:
+    """Whether the phone is absent, and the line to show for that message."""
+    if message == "Waiting for iPhone.":
+        return True, "Plug it in and unlock it."
+    if message == "Choose a folder.":
+        return True, "Choose a folder, then plug the phone in."
+    return False, message
+
+
 def status_text(copied: int, failed: int) -> str:
     if copied == 0 and failed == 0:
         return "iPhone connected. No new files."
@@ -157,6 +166,30 @@ def bundle_ids() -> list[str]:
         if line and not line.startswith("#") and line not in ids:
             ids.append(line)
     return ids
+
+
+def mark_connected() -> None:
+    """Tell the phone app this computer can see it. The stamp stays out of Documents."""
+    try:
+        udid = device_udid()
+    except (OSError, RuntimeError):
+        return
+    if not udid:
+        return
+    local = CONFIG_DIR / "pc-seen"
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        local.write_bytes(b"1\n")
+    except OSError:
+        return
+    for bundle in bundle_ids():
+        try:
+            _afc(udid, bundle, "put", "-f", str(local), "Library/Caches/pc-seen")
+            return
+        except LookupError:
+            continue
+        except (OSError, RuntimeError):
+            return
 
 
 def list_phone_files(udid: str) -> tuple[str, list[str]]:
@@ -271,6 +304,12 @@ def _check() -> None:
     assert status_text(3, 1) == "Copied 3 files. 1 failed."
     assert status_text(0, 1) == "Nothing copied. 1 failed."
     assert status_text(0, 0) == "iPhone connected. No new files."
+    assert window_state("Waiting for iPhone.") == (True, "Plug it in and unlock it.")
+    assert window_state("Choose a folder.") == (True, "Choose a folder, then plug the phone in.")
+    assert window_state("iPhone connected. No new files.") == (
+        False,
+        "iPhone connected. No new files.",
+    )
     print("ok")
 
 
@@ -286,6 +325,7 @@ class _Watcher:
 
     def _loop(self) -> None:
         while not self.stop:
+            mark_connected()
             dest = self.dest
             if dest:
                 try:
@@ -321,6 +361,13 @@ def run_gui() -> None:
             box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
             box.set_size_request(480, -1)
             heading = Gtk.Label(label="Save phone files to", xalign=0)
+            self.banner = Gtk.Label(label="iPhone not connected", xalign=0)
+            banner_attrs = Pango.AttrList()
+            banner_attrs.insert(Pango.attr_scale_new(1.5))
+            banner_attrs.insert(Pango.attr_weight_new(Pango.Weight.BOLD))
+            self.banner.set_attributes(banner_attrs)
+            self.hint = Gtk.Label(xalign=0, wrap=True)
+            self.hint.set_margin_bottom(8)
 
             row = Gtk.Box(spacing=8)
             self.path_label = Gtk.Label(label="No folder yet", xalign=0, selectable=True)
@@ -331,11 +378,13 @@ def run_gui() -> None:
             row.append(self.path_label)
             row.append(choose)
 
-            self.status = Gtk.Label(label="Choose a folder.", xalign=0)
-            self.status.set_wrap(True)
+            self.status = Gtk.Label(xalign=0, wrap=True)
+            box.append(self.banner)
+            box.append(self.hint)
             box.append(heading)
             box.append(row)
             box.append(self.status)
+            self._show("Choose a folder.")
             outer.append(box)
             win.set_child(outer)
             win.present()
@@ -354,14 +403,25 @@ def run_gui() -> None:
             Gtk.Application.do_shutdown(self)
 
         def _post_status(self, message: str) -> None:
-            GLib.idle_add(self.status.set_text, message)
+            GLib.idle_add(self._show, message)
+
+        def _show(self, message: str) -> bool:
+            waiting, detail = window_state(message)
+            self.banner.set_visible(waiting)
+            self.hint.set_visible(waiting)
+            self.status.set_visible(not waiting)
+            if waiting:
+                self.hint.set_text(detail)
+            else:
+                self.status.set_text(detail)
+            return False
 
         def _set_dest(self, path: str) -> None:
             self.dest = path
             if self.watcher:
                 self.watcher.dest = path
             self.path_label.set_text(path)
-            self.status.set_text("Waiting for iPhone.")
+            self._show("Waiting for iPhone.")
 
         def _choose(self, *_args) -> bool:
             dialog = Gtk.FileDialog()
